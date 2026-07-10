@@ -7,7 +7,7 @@ This proposal addresses:
 
 ## Goals
 
-1. Add a first-class STIX Domain Object (SDO) for security incidents.
+1. Expand the existing STIX 2.1 Incident SDO from a stub into a complete incident representation without changing the `incident--` ID namespace.
 2. Add a first-class STIX Domain Object (SDO) for security-relevant events and logs.
 3. Preserve the STIX 2.1 separation between assertions about security activity and raw cyber-observable evidence.
 4. Provide a migration path for existing custom event extensions, especially `x-oca-event`.
@@ -24,10 +24,10 @@ This proposal addresses:
 
 ## Summary of the proposal
 
-STIX 2.2 should introduce two new SDOs:
+STIX 2.2 should expand one existing SDO and introduce one new SDO:
 
-- **Incident**: a higher-level security incident, investigation, or response case that may aggregate many events, observed data objects, indicators, courses of action, identities, and reports.
-- **Event**: a discrete security-relevant occurrence, such as a process creation, file creation, network connection, authentication attempt, alert, or externally observed change in adversary infrastructure.
+- **Incident**: expand the existing STIX 2.1 Incident SDO stub into a higher-level security incident, investigation, or response case that may aggregate many events, observed data objects, indicators, courses of action, identities, and reports.
+- **Event**: introduce a new SDO for a discrete security-relevant occurrence, such as a process creation, file creation, network connection, authentication attempt, alert, or externally observed change in adversary infrastructure.
 
 The Event SDO should describe the occurrence and its role in analysis. Raw log records and detailed observed telemetry should remain in **Artifact** and **Observed Data**. An Event can reference Observed Data, SCOs, and Artifacts to identify the evidence for the occurrence.
 
@@ -35,11 +35,23 @@ The Event SDO should describe the occurrence and its role in analysis. Raw log r
 
 ### Description
 
+STIX 2.1 already defines `incident` as an SDO stub. STIX 2.2 SHOULD treat Incident work as an expansion of that existing SDO, not as the introduction of a second or incompatible Incident concept. The type name remains `incident`, identifiers remain in the existing `incident--...` ID namespace, and STIX 2.1 Incident objects remain syntactically valid STIX objects that can be interpreted as minimally described incidents.
+
 An Incident object represents an identified, suspected, or investigated security incident or response case. It can be used for internal incidents, externally reported incidents, public incident repositories, and cases that track incident-response activity.
+
+### Compatibility with STIX 2.1 Incident objects
+
+STIX 2.1 Incident producers could only use the common SDO properties and extensions to carry incident metadata. STIX 2.2 consumers SHOULD handle those objects as follows:
+
+1. Accept STIX 2.1 `incident` objects that contain only common properties as valid legacy Incident objects.
+2. Preserve the original `id` when upgrading a 2.1 Incident to a 2.2 version of the same object; do not mint a new `incident--...` identifier solely because 2.2 adds incident-specific properties.
+3. Map incident metadata from a STIX 2.1 extension into the standardized 2.2 Incident properties when the semantics match. Extension properties that have no 2.2 equivalent SHOULD remain in the extension.
+4. Treat missing 2.2 Incident-specific properties as unknown, not absent evidence. A legacy Incident without `severity`, `status`, or incident timestamps is still a valid incident assertion.
+5. Use normal STIX versioning rules when publishing an enriched 2.2 version of a legacy 2.1 Incident object.
 
 ### Properties
 
-Incident SHOULD use the common STIX object properties and the following object-specific properties.
+Incident SHOULD use the common STIX object properties and the following object-specific properties. Because STIX 2.1 Incident was a stub, all incident-specific properties are additions to the existing SDO rather than properties of a new object type.
 
 | Property | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -162,7 +174,7 @@ This proposal therefore treats MISP Event support as a packaging and context-map
 
 A STIX bundle translated from a MISP Event SHOULD use one primary container object and relate the translated content to that object:
 
-1. Create an Incident, Report, or Grouping for the MISP Event container.
+1. Create an Incident, Report, or Grouping for the MISP Event container. When Incident is selected, use the expanded STIX 2.2 Incident SDO and preserve any existing `incident--...` identifier if the MISP Event is updating a previously exchanged STIX 2.1 Incident.
 2. Preserve the MISP Event UUID and local identifiers in `external_references` or a MISP extension.
 3. Convert MISP Attributes and Objects into the most specific STIX Indicators, Observed Data, SCOs, Artifacts, or SDOs.
 4. Attach converted content to the primary container with `contains`, `object`, `based-on`, `related-to`, or a more specific relationship when one exists.
@@ -286,16 +298,17 @@ The OCA `x-oca-event` object is useful prior art. STIX 2.2 should reuse its core
 ## Open questions for TC discussion
 
 1. Should Event be an SDO, an SRO with additional properties, or both? This proposal recommends an SDO because events can be sighted, aggregated, enriched, and referenced as analysis objects.
-2. Should Incident include workflow state (`status`) in core STIX, or should detailed workflow remain an extension? This proposal includes only a coarse status vocabulary.
-3. Should `severity` be an open vocabulary or a numeric scale? This proposal recommends open vocabulary in core STIX and allows numeric scoring through extensions.
-4. Should `source_ref` and `target_refs` be constrained to SCOs only, or allow SDOs and SCOs? This proposal allows both because externally observed events may target Identities, Infrastructure, Campaigns, or other SDOs.
-5. Should the Event object include strongly typed convenience references such as `process_ref` and `file_ref`? This proposal recommends generic source/target/evidence references in core STIX, with domain-specific typed references in extensions.
-6. Should STIX 2.2 define a standard MISP extension to preserve fields such as `published`, `distribution`, `sharing_group_id`, `analysis`, and local IDs, or should those remain implementation-specific extension content?
+2. Which STIX 2.1 Incident extension practices should be explicitly mapped into standardized STIX 2.2 Incident properties?
+3. Should Incident include workflow state (`status`) in core STIX, or should detailed workflow remain an extension? This proposal includes only a coarse status vocabulary.
+4. Should `severity` be an open vocabulary or a numeric scale? This proposal recommends open vocabulary in core STIX and allows numeric scoring through extensions.
+5. Should `source_ref` and `target_refs` be constrained to SCOs only, or allow SDOs and SCOs? This proposal allows both because externally observed events may target Identities, Infrastructure, Campaigns, or other SDOs.
+6. Should the Event object include strongly typed convenience references such as `process_ref` and `file_ref`? This proposal recommends generic source/target/evidence references in core STIX, with domain-specific typed references in extensions.
+7. Should STIX 2.2 define a standard MISP extension to preserve fields such as `published`, `distribution`, `sharing_group_id`, `analysis`, and local IDs, or should those remain implementation-specific extension content?
 
 ## Proposed next steps
 
-1. Discuss whether Incident and Event should be accepted as STIX 2.2 candidate SDOs.
-2. If accepted, add normative object definitions, relationship tables, examples, and vocabularies to the STIX 2.2 draft specification.
+1. Discuss whether the Incident expansion and new Event SDO should be accepted as STIX 2.2 candidate work items.
+2. If accepted, add normative Incident updates, Event object definitions, relationship tables, examples, and vocabularies to the STIX 2.2 draft specification, including explicit compatibility text for STIX 2.1 Incident objects.
 3. Create JSON schemas and conformance tests for both objects.
 4. Publish migration guidance for common custom event objects, beginning with `x-oca-event`.
 5. Publish a MISP Event conversion profile that defines recommended mappings for common MISP Attribute types, Object templates, taxonomies, galaxies, sightings, and sharing controls.
