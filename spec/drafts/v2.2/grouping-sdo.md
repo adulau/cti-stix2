@@ -14,6 +14,11 @@ status, context cardinality, origin cardinality, and publication/reference time,
 and [Alexandre's compatibility comment on #354](https://github.com/oasis-tcs/cti-stix2/pull/354#issuecomment-6187791205).
 The additions are proposals for discussion, not recorded TC decisions.
 
+This revision follows the review discussion on this pull request: `context` is
+deprecated in favour of the multi-valued `grouping_types` property, whose
+vocabulary covers every existing context value, and source provenance uses the existing `external_references`
+property instead of a new `origin` property.
+
 ## Goals and scope
 
 1. Use the existing Grouping SDO as a persistent, identifiable unit of shared
@@ -24,10 +29,12 @@ The additions are proposals for discussion, not recorded TC decisions.
 4. Reuse common STIX properties, object references, relationships, markings, and
    versioning.
 
-The new object-specific properties proposed are optional `grouping_types`,
-`analysis_status`, and `origin`. The required, single-valued `context` property
-is retained, with one proposed addition to `grouping-context-ov` directing
-consumers to `grouping_types`. This proposal adds no SDO or identifier namespace.
+The new object-specific properties proposed are optional `grouping_types` and
+`analysis_status`. The single-valued `context` property is deprecated and becomes
+optional; the proposed `grouping-type-ov` includes all existing
+`grouping-context-ov` values. Source
+provenance uses the existing `external_references` property. This proposal adds
+no SDO or identifier namespace.
 It does not change the real-world activity Event proposal discussed in
 [#340](https://github.com/oasis-tcs/cti-stix2/pull/340).
 
@@ -69,12 +76,11 @@ STIX 2.2 Grouping description:
 > intelligence. A Grouping does not by itself assert that the context is an
 > Incident, a published Report, or an operational case-management process.
 >
-> The optional grouping_types property describes the analytical kinds of the
-> Grouping. The optional origin property identifies the external context from
-> which the Grouping was derived. The optional analysis_status property describes
-> the state of the analytical work. These properties supplement the required,
-> single-valued context property. The context value grouping-types indicates
-> that the analytical classifications are supplied in grouping_types.
+> The optional grouping_types property describes one or more shared contexts
+> of the Grouping and supersedes the deprecated, single-valued context property. The
+> optional analysis_status property describes the state of the analytical work
+> of the Grouping's creator. External sources from which the Grouping was derived
+> are identified using external_references.
 >
 > A Grouping MAY reference an Incident or Report when those objects' semantics
 > apply. Producing such an object does not require changing the Grouping's type
@@ -82,60 +88,44 @@ STIX 2.2 Grouping description:
 
 ## Proposed properties
 
-Keep all existing Grouping common and object-specific properties and add
-`grouping_types`, `analysis_status`, and `origin` to the Grouping-specific
-property summary.
+Keep all existing Grouping common and object-specific properties, change
+`context` to optional and deprecated, and add `grouping_types` and `analysis_status`
+to the Grouping-specific property summary.
 
 | Property | Type | Required | Proposed definition |
 | --- | --- | --- | --- |
 | `type` | `string` | Required, existing | MUST remain `grouping`. |
 | `name` | `string` | Required, existing | A name used to identify the Grouping. |
 | `description` | `string` | Optional, existing | Details about the Grouping, its purpose, and its characteristics. |
-| `context` | `open-vocab` | Required, existing | The particular context shared by the referenced content; values SHOULD come from `grouping-context-ov`. Remains single-valued. The proposed `grouping-types` value directs consumers to `grouping_types`. |
+| `context` | `open-vocab` | Optional, deprecated | A single descriptor of the context shared by the referenced content; values SHOULD come from `grouping-context-ov`. Superseded by `grouping_types`. |
+| `grouping_types` | `list` of `open-vocab` | Optional, new | The contexts shared by the referenced content. Values SHOULD come from the proposed `grouping-type-ov` vocabulary. |
 | `object_refs` | `list` of `identifier` | Required, existing | The STIX Objects referred to by the Grouping. Existing non-empty-list requirements and permitted target types apply. |
-| `grouping_types` | `list` of `open-vocab` | Optional, new | The analytical kinds of the Grouping. Values SHOULD come from the proposed `grouping-type-ov` vocabulary. |
 | `analysis_status` | `open-vocab` | Optional, new | The state of the analytical work represented by the Grouping. Values SHOULD come from the proposed `grouping-analysis-status-ov` vocabulary. |
-| `origin` | `external-reference` | Optional, new | The primary external context from which the Grouping was derived, using the existing STIX External Reference data type. |
+| `external_references` | `list` of `external-reference` | Optional, existing | Existing common property; also identifies the external sources from which the Grouping was derived (see Source provenance). |
 
-### context and backward compatibility
+### context, grouping_types, and backward compatibility
 
-Retain `context` as a required, single-valued `open-vocab`; do not convert it to
-a list or require existing producers to supply `grouping_types`. Retain all
-existing `grouping-context-ov` values and meanings, including
-`suspicious-activity`, `malware-analysis`, and `unspecified`.
+A Grouping MUST include at least one of `context` or `grouping_types`, so every
+Grouping continues to assert a context. If the context is unknown, producers
+SHOULD use `unspecified`.
 
-Add the following entry to `grouping-context-ov`:
+`context` is deprecated. Producers SHOULD use `grouping_types`. To support consumers
+that only understand `context`, producers MAY also include `context`. When both
+are present, the value of `context` SHOULD also appear in `grouping_types`, and
+consumers that understand `grouping_types` SHOULD use it and ignore `context`.
 
-| Value | Meaning |
-| --- | --- |
-| `grouping-types` | The shared analytical context is described by the classifications in `grouping_types`; consumers should consult that property for details. |
+Unlike `observed-data` `objects` and `object_refs`, the two properties are not
+mutually exclusive: allowing both during the transition lets a producer serve
+older and newer consumers with the same object.
 
-When `context` is `grouping-types`, producers MUST include a non-empty
-`grouping_types` list. For other context values, `grouping_types` remains
-optional. Producers MAY retain a more specific existing context value alongside
-`grouping_types`; they are not required to replace it with `grouping-types`.
+If present, `grouping_types` MUST contain at least one value. Producers SHOULD NOT
+repeat values and SHOULD NOT combine `unspecified` with other values. Values are
+not exclusive and do not prescribe workflow state. Consumers MUST NOT infer that
+an Incident, Report, or Case exists solely from a `grouping_types` value.
 
-Consumers that understand the new value SHOULD use `grouping_types` to interpret
-the analytical classifications. Consumers that do not understand it encounter an
-unrecognized open-vocabulary string and MUST NOT infer classifications from the
-marker itself. Existing open-vocabulary handling applies; the marker does not
-guarantee that older applications can display or act on the new classifications.
-
-### grouping_types
-
-The common `type` property is the STIX object discriminator and MUST remain
-`grouping`. The proposed `grouping_types` name avoids overloading it.
-
-`context` remains a single descriptor or the `grouping-types` marker defined above.
-`grouping_types` allows multiple analytical classifications of the persistent
-context. For example, `context: "malware-analysis"` can describe the shared
-subject while `grouping_types: ["malware-analysis", "investigation"]` describes
-both the kind of analysis and its investigative use.
-
-If present, the list MUST contain at least one value. Producers SHOULD NOT repeat
-values. Vocabulary values are not exclusive and do not prescribe workflow state.
-Consumers MUST NOT infer that an Incident, Report, or Case exists solely from a
-`grouping_types` value.
+For example, `grouping_types: ["malware-analysis", "investigation"]` describes both
+the subject of the analysis and its investigative use; a producer supporting
+older consumers can add `context: "malware-analysis"`.
 
 #### Proposed Grouping Type vocabulary
 
@@ -143,22 +133,26 @@ Consumers MUST NOT infer that an Incident, Report, or Case exists solely from a
 
 **Used by:** Grouping `grouping_types`
 
-This is an open vocabulary; custom values remain permitted under the common
-STIX open-vocabulary rules.
+The vocabulary includes every existing `grouping-context-ov` value with its
+meaning, so every existing `context` value can be expressed in `grouping_types`
+without loss. The deprecated `context` continues to use `grouping-context-ov`
+unchanged. This is an open vocabulary; custom values remain permitted under the
+common STIX open-vocabulary rules.
 
-| Value | Meaning |
-| --- | --- |
-| `investigation` | Intelligence assembled around an analytical investigation; does not assert an operational Case or workflow state. |
-| `incident-analysis` | Intelligence assembled to analyze an actual or suspected incident; any explicit incident assertion belongs in an Incident object. |
-| `malware-analysis` | Intelligence assembled to analyze a malware instance or family. |
-| `threat-actor-analysis` | Intelligence assembled to analyze a threat actor or intrusion set. |
-| `vulnerability-analysis` | Intelligence assembled to analyze a vulnerability or related exploitation activity. |
-| `indicator-collection` | Related indicators and supporting objects assembled for a shared analytical purpose. |
+| Value | Origin | Meaning |
+| --- | --- | --- |
+| `suspicious-activity` | From `grouping-context-ov` | A set of STIX content related to a particular suspicious activity event. |
+| `malware-analysis` | From `grouping-context-ov` | A set of STIX content related to a particular malware instance or family. |
+| `unspecified` | From `grouping-context-ov` | A set of STIX content contextually related but without any precise characterization of the contextual relationship between the objects. |
+| `investigation` | New | Intelligence assembled around an analytical investigation; does not assert an operational Case or workflow state. |
+| `incident-analysis` | New | Intelligence assembled to analyze an actual or suspected incident; any explicit incident assertion belongs in an Incident object. |
+| `threat-actor-analysis` | New | Intelligence assembled to analyze a threat actor or intrusion set. |
+| `vulnerability-analysis` | New | Intelligence assembled to analyze a vulnerability or related exploitation activity. |
+| `indicator-collection` | New | Related indicators and supporting objects assembled for a shared analytical purpose. |
 
-An imported container's format is not its analytical kind. A producer SHOULD NOT
-use `misp-event` as a substitute for an analytical classification. If its kind
-is unknown, the producer MAY omit `grouping_types`; `context` remains required
-and can use the existing `unspecified` value.
+An imported container's format is not its analytical context. A producer SHOULD
+NOT use `misp-event` as a `grouping_types` value. If the context is unknown, the
+producer uses `unspecified`.
 
 ### analysis_status
 
@@ -167,6 +161,11 @@ Grouping, independently of its analytical kinds. It does not describe incident
 severity, confidence, publication state, or the state of an operational Case.
 The property is optional; its absence means no analysis status is asserted and
 MUST NOT be interpreted as `initial` or `completed`.
+
+`analysis_status` reflects only the work of the Grouping's creator. When several
+producers publish Groupings about the same source context, for example the same
+MISP Event, consumers MUST NOT interpret one producer's status as the status of
+another producer's Grouping or combine them into a single status.
 
 #### Proposed Grouping Analysis Status vocabulary
 
@@ -191,44 +190,31 @@ has been resolved. Unknown source statuses MUST NOT be silently mapped to one
 of these values; retain their semantics using a documented custom vocabulary
 value or a source-specific extension.
 
-### origin
+### Source provenance
 
-`origin` designates the primary source container, document, or other external
-analytical context represented by the Grouping. It reuses the `external-reference`
-data type and all its requirements, including required `source_name` and at
-least one of `description`, `url`, or `external_id`.
+External sources from which a Grouping was derived, such as a MISP Event, a
+source container, or another document, are identified using the existing
+`external_references` property. This allows multiple sources and is consistent
+with other SDOs.
 
-The producer SHOULD include a stable `external_id` when one is available.
-A `url` MAY identify the source context's location. Its inclusion does not
-grant access or change the Grouping's markings. The source identifier MUST NOT
-be confused with a local database row number when a stable identifier exists.
+For each such source, the producer SHOULD include a stable `external_id` when one
+is available. A `url` MAY identify the source's location; its inclusion does not
+grant access or change the Grouping's markings. A local database row number MUST
+NOT be used as `external_id` when a stable identifier exists. A producer MAY use
+the reference's `description` to state that the Grouping was derived from it,
+distinguishing it from supporting citations.
 
 For a MISP Event, `source_name` can be `misp` and `external_id` its Event UUID.
 Where identifiers are only unique within a particular source instance,
 `source_name` and the source location SHOULD distinguish that instance.
 
-`origin` identifies the primary derivation source; it is not an Identity
-reference and does not replace `created_by_ref`. Other external sources and
-citations continue to use `external_references`. Derivation from another STIX
-Grouping SHOULD use a `derived-from` Relationship instead of encoding a STIX
-identifier as an external origin.
-
-Consumers MUST NOT treat `origin` alone as proof of authenticity, trust, or
-authorization. Relaying the same Grouping SHOULD preserve its origin; a relay
-does not become its origin merely by distributing it.
-
-#### Origin cardinality for TC review
-
-The current draft keeps a single primary `origin`. A Grouping assembled from
-several sources MAY omit `origin` when no primary source can be identified;
-other source citations use `external_references`. That list does not by itself
-distinguish derivation sources from supporting citations.
-
-If multiple explicit derivation sources are required, the TC should consider a
-list of `external-reference` values, for example an `origins` property, and
-decide whether a primary source must be designated. This revision does not change
-`origin` between an object and a list. Whether the same provenance mechanism
-should apply to Report or other SDOs also remains an open design question.
+A source reference is not an Identity reference and does not replace
+`created_by_ref`. Derivation from another STIX Grouping SHOULD use a
+`derived-from` Relationship instead of encoding a STIX identifier as an external
+reference. Consumers MUST NOT treat a source reference alone as proof of
+authenticity, trust, or authorization. Relaying the same Grouping SHOULD
+preserve its source references; a relay does not become a source merely by
+distributing it.
 
 ### Publication and reference time for TC review
 
@@ -263,15 +249,15 @@ Report's existing `published` property only when Report semantics apply.
   `object_refs` and other properties as appropriate.
 - Referencing an Incident or Report supplements the Grouping; it does not
   convert the Grouping into a different SDO.
-- Keep `name`, `context`, and `object_refs` required. An empty source container
-  cannot be represented as a conforming Grouping with an empty `object_refs`
-  list under this amendment.
-- All three new properties are optional for existing representations. A producer
-  choosing the new `context: "grouping-types"` value MUST also supply a non-empty
-  `grouping_types` list. Existing context values do not acquire this requirement.
-- The type and required status of `context` are unchanged. Adding an open-vocabulary
-  value preserves its representation; it does not guarantee STIX 2.1 schema or
-  application support for the new properties or proposed STIX 2.2 version.
+- Keep `name` and `object_refs` required. An empty source container cannot be
+  represented as a conforming Grouping with an empty `object_refs` list under
+  this amendment.
+- `context` changes from required to optional and deprecated; at least one of
+  `context` or `grouping_types` remains required. Existing Groupings with only `context`
+  remain conforming.
+- `grouping_types` and `analysis_status` are optional. Existing
+  `grouping-context-ov` values keep their meaning and are included in
+  `grouping-type-ov`.
 - The examples below target the proposed STIX 2.2 amendment. They do not make
   unprefixed new properties conforming STIX 2.1 properties. STIX 2.1 exchanges
   require an appropriate extension or the applicable customization rules.
@@ -283,10 +269,10 @@ It SHOULD NOT create an Incident or Report solely to carry container metadata.
 
 | MISP element | Proposed STIX representation | Guidance |
 | --- | --- | --- |
-| `Event.uuid` | `origin.external_id`; optionally the UUID component of `grouping.id` | Preserve the source UUID in `origin`. Reuse it in the STIX identifier only when it satisfies STIX identifier requirements. |
+| `Event.uuid` | `external_references` entry with `source_name` `misp` and the UUID as `external_id`; optionally the UUID component of `grouping.id` | Preserve the source UUID in `external_references`. Reuse it in the STIX identifier only under the conditions below. |
 | `Event.info` | `name` | Human-readable summary. |
 | Additional narrative | `description` | When available. |
-| Analytical purpose | `context` and optional `grouping_types` | Choose from actual content or explicit classifications. Use `context: "grouping-types"` only with a non-empty `grouping_types` list; otherwise retain an appropriate existing context value. Do not guess an incident or report from the source container name. |
+| Analytical purpose | `grouping_types`, optionally also `context` | Choose from actual content or explicit classifications; use `unspecified` when unknown. Do not guess an incident or report from the source container format. |
 | `Event.analysis` | `analysis_status` | Map `0` to `initial`, `1` to `ongoing`, and `2` to `completed`; omit when no status is asserted. Preserve unknown states without guessing. |
 | `Event.timestamp` | `modified` | Convert the Unix timestamp to a STIX timestamp when it represents the corresponding revision. Respect STIX creation/modification ordering and versioning rules. |
 | `Event.Orgc` | `created_by_ref`, when its meaning matches | An Identity for the organization responsible for creating the represented STIX content; retain differing source provenance in an extension when necessary. |
@@ -308,10 +294,17 @@ proposal introduces no new UID format or automatic latest-version rule.
 A converter MAY reuse a conforming MISP UUID as the UUID component of the
 Grouping identifier, for example `grouping--8f70f1d1-2c88-4b3f-91f9-678098ab3f8f`.
 Otherwise it MUST generate a conforming STIX identifier and preserve the original
-UUID in `origin.external_id`. Reusing an identifier does not authorize different
+UUID in `external_references`. Reusing an identifier does not authorize different
 creators to publish conflicting versions of the same STIX object.
 
-The reverse conversion can use `origin` to recognize the source MISP Event and
+MISP Events keep their UUID when synchronized between instances. A converter
+SHOULD reuse the Event UUID in the Grouping identifier only when `created_by_ref`
+represents the Event's creator organization (`Event.Orgc`). A converter that uses
+its own Identity as `created_by_ref`, for example on a receiving instance, MUST
+generate its own Grouping identifier; otherwise different creators would publish
+versions of the same STIX object.
+
+The reverse conversion can use the `misp` external reference to recognize the source MISP Event and
 `object_refs` as its analytical boundary. Lossless round-tripping additionally
 requires source-specific mappings or extensions for the deferred fields.
 
@@ -336,12 +329,13 @@ This remains usable under the amended Grouping definition.
 
 The referenced Indicator can be supplied separately.
 
-## Example: MISP-origin analytical context
+## Example: MISP-derived analytical context
 
 This Bundle contains the Grouping and every object referenced by the example.
 The source context is a MISP Event, while the STIX object remains a Grouping.
-The `grouping-types` context marker directs consumers to its two analytical
-classifications; `analysis_status` independently records ongoing work.
+`grouping_types` carries its two analytical contexts, and the deprecated `context` is
+included for older consumers; `analysis_status` independently records ongoing
+work. The MISP Event is identified in `external_references`.
 
 ```json
 {
@@ -366,14 +360,17 @@ classifications; `analysis_status` independently records ongoing work.
       "modified": "2026-10-02T12:00:31.000Z",
       "name": "Investigation of Foo ransomware infrastructure",
       "description": "Collaborative analysis of infrastructure associated with Foo ransomware.",
-      "context": "grouping-types",
+      "context": "malware-analysis",
       "grouping_types": ["malware-analysis", "investigation"],
       "analysis_status": "ongoing",
-      "origin": {
-        "source_name": "misp",
-        "external_id": "8f70f1d1-2c88-4b3f-91f9-678098ab3f8f",
-        "url": "https://misp.example.invalid/events/view/8f70f1d1-2c88-4b3f-91f9-678098ab3f8f"
-      },
+      "external_references": [
+        {
+          "source_name": "misp",
+          "external_id": "8f70f1d1-2c88-4b3f-91f9-678098ab3f8f",
+          "url": "https://misp.example.invalid/events/view/8f70f1d1-2c88-4b3f-91f9-678098ab3f8f",
+          "description": "Source MISP Event from which this Grouping was derived."
+        }
+      ],
       "object_refs": [
         "indicator--52bfa2cb-3f6b-4ee8-9845-230e14729210",
         "malware--0c7b5b88-8ff7-4a4d-aa9d-feb398cd0061",
@@ -434,19 +431,20 @@ As the analysis evolves, the creator can publish a new version of
 `grouping--8f70f1d1-2c88-4b3f-91f9-678098ab3f8f` with a later `modified`
 timestamp and additional references. If an Incident is identified or a Report
 produced, its identifier can be added to `object_refs`; the Grouping's identity
-and origin remain stable.
+and source references remain stable.
 
 ## Questions for TC review
 
-1. Is `grouping-types` an appropriate new `grouping-context-ov` value directing
-   consumers to `grouping_types`, while retaining required, single-valued
-   `context` and all existing values?
-2. Should `origin` designate a single primary external context as proposed, or
-   should multiple origins be supported explicitly?
-3. Is reusing `external-reference` sufficient for origin, or is a dedicated
-   provenance data type needed?
-4. Are the proposed analytical kinds appropriate, and which values should be
-   standardized initially?
+1. What should the new multi-valued property be named? This draft keeps
+   `grouping_types`; `additional_contexts` and `contexts` were also suggested.
+   `additional_contexts` reads as a supplement to `context` rather than its
+   replacement, and `contexts` is easily confused with `context`.
+2. Is allowing both `context` and `grouping_types` during the transition
+   acceptable, rather than making them mutually exclusive?
+3. Which new `grouping-type-ov` values should be standardized initially?
+4. Is `external_references`, optionally with a `description` stating derivation,
+   sufficient to distinguish derivation sources from supporting citations, or is
+   a dedicated provenance mechanism needed?
 5. Are `analysis_status` and the proposed MISP-aligned values suitable for
    general Grouping use, and should they reuse a broader analysis vocabulary?
 6. Should publication metadata describe the Grouping itself or the source
@@ -458,15 +456,15 @@ and origin remain stable.
 
 ## Proposed next steps
 
-1. Review the description amendment and the three optional properties.
-2. Resolve the context marker, analysis-status vocabulary, origin cardinality,
-   and publication/reference-time placement without changing `context` to a list.
-3. Incorporate the agreed text into the STIX 2.2 Grouping section, extend
-   `grouping-context-ov`, and add `grouping-type-ov` and
+1. Review the description amendment, the deprecation of `context`, and the two
+   optional properties.
+2. Resolve the property name, vocabulary additions, analysis-status vocabulary,
+   and publication/reference-time placement.
+3. Incorporate the agreed text into the STIX 2.2 Grouping section, mark
+   `context` as deprecated, and add `grouping-type-ov` and
    `grouping-analysis-status-ov` to the vocabulary section.
 4. Update the corresponding STIX 2.2 schemas and conformance fixtures in the
    repositories that maintain them.
-5. Test existing Grouping compatibility, the context marker's non-empty-list
-   requirement, all new properties, object reference resolution, and
-   source-to-STIX identity/version/status mappings.
-
+5. Test existing Grouping compatibility, the at-least-one-of `context`/`grouping_types`
+   requirement, precedence when both are present, object reference resolution,
+   and source-to-STIX identity/version/status mappings.
