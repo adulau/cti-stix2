@@ -1,0 +1,25 @@
+name: Close Issue on Non-Default Branch Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - develop
+      - 'release/**'
+
+jobs:
+  close-issue:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Close referenced issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "$PR_BODY" | grep -oiE '(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' | sort -u | while read -r issue_num; do
+            gh issue close "$issue_num" --repo "$REPO" --reason completed
+          done
